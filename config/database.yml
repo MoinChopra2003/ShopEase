@@ -1,0 +1,20 @@
+default: &default
+  adapter: postgresql
+  encoding: unicode
+  pool: <%= ENV.fetch("RAILS_MAX_THREADS") { 5 } %>
+  username: moin_chopra
+  password: 123456
+  host: localhost
+
+development:
+  <<: *default
+  database: shopease_development
+
+test:
+  <<: *default
+  database: shopease_test
+
+production:
+  primary:
+    <<: *default
+    database: shopease_production

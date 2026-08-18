@@ -22,14 +22,14 @@ class GraphqlController < ActionController::API
     decoded = JsonWebToken.decode(token)
     return nil unless decoded
 
-    User.find_by(id: decoded['user_id'])
+    User.find_by(id: decoded["user_id"])
   end
 
   def extract_token
-    auth_header = request.headers['Authorization']
+    auth_header = request.headers["Authorization"]
     return nil unless auth_header
 
-    auth_header.split(' ').last
+    auth_header.split(" ").last
   end
 
   def normalize_graphql_variables(variables, query)
@@ -46,37 +46,41 @@ class GraphqlController < ActionController::API
 
   def extract_query_variable_types(query)
     query.scan(/\$([A-Za-z_][A-Za-z0-9_]*)\s*:\s*([^\s,)]+)/).each_with_object({}) do |(name, raw_type), types|
-      types[name] = raw_type.sub(/!\z/, '')
+      types[name] = raw_type.sub(/!\z/, "")
     end
   end
 
   def coerce_value_for_type(value, type_name)
     return value if value.nil? || type_name.blank?
 
-    normalized_type = type_name.to_s.sub(/!\z/, '')
+    normalized_type = type_name.to_s.sub(/!\z/, "")
 
-    if normalized_type.start_with?('[') && normalized_type.end_with?(']')
+    if normalized_type.start_with?("[") && normalized_type.end_with?("]")
       item_type = normalized_type[1..-2]
       return Array(value).map { |item| coerce_value_for_type(item, item_type) }
     end
 
     case normalized_type
-    when 'Boolean'
-      return true if value == true || value == 'true'
-      return false if value == false || value == 'false'
-      return nil if value == 'null'
+    when "Boolean"
+      return true if value == true || value == "true"
+      return false if value == false || value == "false"
+      return nil if value == "null"
       return value
-    when 'Int'
+    when "Int"
       return value.to_i if value.is_a?(String)
+
       return value
-    when 'Float'
+    when "Float"
       return value.to_f if value.is_a?(String)
+
       return value
-    when 'String', 'ID'
+    when "String", "ID"
       return value.to_s unless value.is_a?(String)
+
       return value
     else
       return coerce_input_object_value(value, normalized_type) if value.is_a?(Hash) && input_object_class_for(normalized_type)
+
       return value
     end
   end
@@ -98,22 +102,26 @@ class GraphqlController < ActionController::API
   def coerce_argument_value(value, argument_type)
     return value if value.nil? || argument_type.nil?
 
-    if argument_type.respond_to?(:of_type) && (argument_type.is_a?(GraphQL::Schema::List) || argument_type.to_s.include?('List'))
+    if argument_type.respond_to?(:of_type) &&
+       (argument_type.is_a?(GraphQL::Schema::List) || argument_type.to_s.include?("List"))
       return Array(value).map { |item| coerce_argument_value(item, argument_type.of_type) }
     end
 
-    unwrapped_type = argument_type.respond_to?(:of_type) ? argument_type.of_type : argument_type
+    unwrapped_type = argument_type
     unwrapped_type = unwrapped_type.unwrap if unwrapped_type.respond_to?(:unwrap)
 
     if unwrapped_type.is_a?(Class) && unwrapped_type < GraphQL::Schema::InputObject
-      return coerce_input_object_value(value, unwrapped_type.name.split('::').last)
+      return coerce_input_object_value(value, unwrapped_type.name.split("::").last)
     end
 
-    type_name = if unwrapped_type.respond_to?(:name)
-                  unwrapped_type.name
-                else
-                  argument_type.to_s
-                end
+    type_name =
+      if unwrapped_type.respond_to?(:graphql_name)
+        unwrapped_type.graphql_name
+      elsif unwrapped_type.respond_to?(:name)
+        unwrapped_type.name
+      else
+        argument_type.to_s
+      end
 
     coerce_value_for_type(value, type_name)
   end
